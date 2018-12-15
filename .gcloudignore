@@ -1,0 +1,5 @@
+ffmpeg_static_builds/mac/*
+source_examples/*
+outputs/*
+.git/*
+__pycache__/*
