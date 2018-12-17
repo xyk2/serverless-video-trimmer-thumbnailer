@@ -57,6 +57,52 @@ def round_to_nearest_even(number):
 
 	return number
 
+def ffmpeg_output_args(**params):
+	kwargs = dict()
+	kwargs['movflags'] = '+faststart' # moov atom in front
+	kwargs['hide_banner'] = None # hide ffmpeg banner from logs
+	kwargs['nostdin'] = None # disable interactive mode
+	kwargs['loglevel'] = 'debug' # more detailed logs from ffmpeg
+
+	if params['operation'] == 'thumbnail':
+		kwargs['vframes'] = '1'
+
+	if 'height' in params:
+		# Set fixed heigh & scale width to closest even number
+		kwargs['vf'] = "scale=-2:'min({},ih)'".format(round_to_nearest_even(params['height']))
+
+	if 'width' in params:
+		kwargs['vf'] = "scale='min({},iw)':-2".format(round_to_nearest_even(params['width']))
+
+	if 'fast' in params and ('height' in params or 'width' in params):
+		abort(400)
+
+	if 'fast' in params:
+		kwargs['c'] = 'copy'
+
+	return kwargs
+
+def ffmpeg_input_args(**params):
+	kwargs = dict()
+	kwargs['multiple_requests'] = '1' # Reuse tcp connections
+
+	if params['operation'] == 'thumbnail' and 'start' in params and '%' in params['start']:
+		## FFprobe (requires another complete moov atom handshake, slow)
+		probe = ffmpeg.probe(request_signed_url(params['source_file']))
+		video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+		params['start'] = (float(params['start'].strip('%')) / 100.1) * float(video_stream['duration'])
+		params.pop('end', None)
+
+	if 'start' in params:
+		kwargs['ss'] = float(params['start'])
+
+	if 'end' in params:
+		kwargs['t'] = float(params['end']) - float(params['start'])
+
+	return kwargs
+
+
+
 
 
 
@@ -69,6 +115,7 @@ def trim(request):
 	_time = int(time.time())
 	_params = dict()
 	_params['operation'] = request.path[0]
+	_params['source_file'] = request.path[2]
 
 	# Extract parameters from URL field
 	for param in _source_params.split(','):
@@ -83,61 +130,17 @@ def trim(request):
 		except: abort(400)
 
 	## Create args for ffmpeg.input
-	_input_kwargs = dict()
-	_input_kwargs['multiple_requests'] = '1' # Reuse tcp connections
-
-	if _params['operation'] == 'thumbnail' and 'start' in _params and '%' in _params['start']:
-		probe = ffmpeg.probe(request_signed_url(_source_file))
-		video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-		_params['start'] = (float(_params['start'].strip('%')) / 100.1) * float(video_stream['duration'])
-		_params.pop('end', None)
-
-	if 'start' in _params:
-		_input_kwargs['ss'] = float(_params['start'])
-
-	if 'end' in _params:
-		_input_kwargs['t'] = float(_params['end']) - float(_params['start'])
+	_input_kwargs = create_input_args(**_params)
 
 	## Generate hash
 	_hash = generate_hash("{}:{}".format(json.dumps(_params, sort_keys=True), _source_file))
-
-	## FFprobe (requires another complete moov atom handshake, slow)
-	#probe = ffmpeg.probe(request_signed_url(_source_file))
-	#video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-	#width = int(video_stream['width'])
-	#height = int(video_stream['height'])
-
-	## Run FFMPEG
-	#watermark = ffmpeg.input('./watermark.png')
-
 
 	job = ffmpeg.input(request_signed_url(_source_file), **_input_kwargs)
 	#job = ffmpeg.filter(job, 'fps', fps=25, round='up')
 	#job = ffmpeg.drawbox(job, 50, 50, 120, 120, color='red', thickness=5)
 	#job = ffmpeg.overlay(job, watermark)
 
-	kwargs = dict()
-	kwargs['movflags'] = '+faststart' # moov atom in front
-	kwargs['hide_banner'] = None # hide ffmpeg banner from logs
-	kwargs['nostdin'] = None # disable interactive mode
-	kwargs['loglevel'] = 'debug' # more detailed logs from ffmpeg
-
-	if _params['operation'] == 'thumbnail':
-		kwargs['vframes'] = '1'
-
-	if 'height' in _params:
-		# Set fixed heigh & scale width to closest even number
-		kwargs['vf'] = "scale=-2:'min({},ih)'".format(round_to_nearest_even(_params['height']))
-
-	if 'width' in _params:
-		kwargs['vf'] = "scale='min({},iw)':-2".format(round_to_nearest_even(_params['width']))
-
-	if 'fast' in _params and ('height' in _params or 'width' in _params):
-		abort(400)
-
-	if 'fast' in _params:
-		kwargs['c'] = 'copy'
-
+	kwargs = create_output_args(**_params)
 
 	job = ffmpeg.output(job, '{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg'), **kwargs)
 
@@ -210,7 +213,6 @@ def trim(request):
 #	Benchmark ffmpeg invocation, download, transcode, upload times
 #	Benchmark serverless vs container pricing per clip
 #	Benchmark cross region load times (GCP Japan to GCS Taiwan)
-
 
 
 
