@@ -3,3 +3,4 @@ source_examples/*
 outputs/*
 .git/*
 __pycache__/*
+*.pcapng
