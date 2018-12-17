@@ -12,7 +12,7 @@ import logging
 
 logging.getLogger().setLevel(logging.INFO)
 
-from flask import Flask, abort, request, jsonify, send_file
+from flask import Flask, abort, request, jsonify, send_file, make_response
 
 _allowed_params = ['start', 'end', 'q', 'height', 'width', 'fast'] # Allowed parameters in the URL request
 SOURCE_BUCKET_NAME = 'LOL'
@@ -49,6 +49,7 @@ def upload_to_storage_and_return_url(filename):
 	return filename
 
 def round_to_nearest_even(number):
+	"Round a number to the next highest even number if odd."
 	number = int(number)
 
 	if number % 2 == 1: # Odd heights are not allowed in codec spec
@@ -63,12 +64,11 @@ def trim(request):
 	if request.path == '/favicon.ico': abort(404) # Ignore browser requests for favicon
 
 	request.path = request.path.strip('/').split('/')
-	_operation = request.path[0]
 	_source_params = request.path[1]
 	_source_file = request.path[2]
 	_time = int(time.time())
 	_params = dict()
-	_hash = None
+	_params['operation'] = request.path[0]
 
 	# Extract parameters from URL field
 	for param in _source_params.split(','):
@@ -82,23 +82,24 @@ def trim(request):
 			else: abort(400)
 		except: abort(400)
 
-	## Generate hash
-	_hash = generate_hash("{}:{}".format(json.dumps(_params, sort_keys=True), _source_file))
-
 	## Create args for ffmpeg.input
 	_input_kwargs = dict()
 	_input_kwargs['multiple_requests'] = '1' # Reuse tcp connections
 
-	if _operation == 'thumbnail' and 'start' in _params and '%' in _params['start']:
+	if _params['operation'] == 'thumbnail' and 'start' in _params and '%' in _params['start']:
 		probe = ffmpeg.probe(request_signed_url(_source_file))
 		video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-		_params['start'] = (float(_params['start'].strip('%')) / 100) * float(video_stream['duration'])
+		_params['start'] = (float(_params['start'].strip('%')) / 100.1) * float(video_stream['duration'])
+		_params.pop('end', None)
 
 	if 'start' in _params:
 		_input_kwargs['ss'] = float(_params['start'])
 
 	if 'end' in _params:
 		_input_kwargs['t'] = float(_params['end']) - float(_params['start'])
+
+	## Generate hash
+	_hash = generate_hash("{}:{}".format(json.dumps(_params, sort_keys=True), _source_file))
 
 	## FFprobe (requires another complete moov atom handshake, slow)
 	#probe = ffmpeg.probe(request_signed_url(_source_file))
@@ -108,6 +109,7 @@ def trim(request):
 
 	## Run FFMPEG
 	#watermark = ffmpeg.input('./watermark.png')
+
 
 	job = ffmpeg.input(request_signed_url(_source_file), **_input_kwargs)
 	#job = ffmpeg.filter(job, 'fps', fps=25, round='up')
@@ -120,7 +122,7 @@ def trim(request):
 	kwargs['nostdin'] = None # disable interactive mode
 	kwargs['loglevel'] = 'debug' # more detailed logs from ffmpeg
 
-	if _operation == 'thumbnail':
+	if _params['operation'] == 'thumbnail':
 		kwargs['vframes'] = '1'
 
 	if 'height' in _params:
@@ -137,7 +139,8 @@ def trim(request):
 		kwargs['c'] = 'copy'
 
 
-	job = ffmpeg.output(job, '{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _operation == 'trim' else 'jpg'), **kwargs)
+	job = ffmpeg.output(job, '{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg'), **kwargs)
+
 
 	try:
 		out, err = ffmpeg.run(job, cmd=FFMPEG_BINARY_PATH, capture_stderr=True, capture_stdout=True)
@@ -147,11 +150,10 @@ def trim(request):
 		#logging.error(err.decode('utf-8').replace('\n', ' '))
 
 	except ffmpeg.Error as e:
+		abort(500)
 		logging.error(e.stderr.decode().replace('\n', ' '))
 		logging.error(e.stderr)
 		logging.error(e)
-
-		#print(e.stderr.decode(), file=sys.stderr)
 
 	logging.info({
 		'params': _source_params,
@@ -165,7 +167,11 @@ def trim(request):
 	})
 
 
-	return send_file('{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _operation == 'trim' else 'jpg'))
+
+
+	response = make_response(send_file('{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg')))
+	response.headers['X-Query-Hash'] = _hash
+	return response
 
 	#return jsonify({
 	#	'params': _source_params,

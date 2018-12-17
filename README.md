@@ -1,6 +1,6 @@
 # serverless-video-trimmer
 
-Trim and transcode (if neeed) video clips from long files on vendor-neutral serverless platforms (Lambda and GCF). Used in a video pipeline to generate custom user-specified clips server-side. Repeated requests are served from a storage-backed service on S3 or GCS.
+Trim and transcode (if neeed) video clips from long files on vendor-neutral serverless platforms (Lambda and GCF). Used in a video pipeline to generate custom user-specified clips server-side. Repeated requests are served from a storage-backed bucket on S3 or GCS. Essentially a Thumbor equivalent for video (or Cloudinary / Imgix).
 
 ### Differences & advantages
 The pseudo-streaming approach to the input file has several key advantages:

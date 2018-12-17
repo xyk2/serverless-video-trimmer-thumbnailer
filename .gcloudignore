@@ -4,3 +4,4 @@ outputs/*
 .git/*
 __pycache__/*
 *.pcapng
+*.mp4
