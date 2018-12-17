@@ -10,6 +10,8 @@ import os
 import sys
 import logging
 
+logging.getLogger().setLevel(logging.INFO)
+
 from flask import Flask, abort, request, jsonify, send_file
 
 _allowed_params = ['s', 'f', 'q', 'w'] # Allowed parameters in the URL request
@@ -84,23 +86,28 @@ def trim(request):
 	height = int(video_stream['height'])
 
 	## Run FFMPEG
-	watermark = ffmpeg.input('watermark.png')
+	watermark = ffmpeg.input('./watermark.png')
 
 	job = ffmpeg.input(request_signed_url(_source_file), **_ffmpeg_input_args)
 	#job = ffmpeg.filter(job, 'fps', fps=25, round='up')
-	job = ffmpeg.drawbox(job, 50, 50, 120, 120, color='red', thickness=5)
-	job = ffmpeg.overlay(job, watermark)
-	job = ffmpeg.output(job, '{}/{}_{}.mp4'.format(LOCAL_DESTINATION_PATH, _time, _hash), **{'movflags': '+faststart'})
+	#job = ffmpeg.drawbox(job, 50, 50, 120, 120, color='red', thickness=5)
+	#job = ffmpeg.overlay(job, watermark)
+	job = ffmpeg.output(job, '{}/{}_{}.mp4'.format(LOCAL_DESTINATION_PATH, _time, _hash), **{'movflags': '+faststart', 'hide_banner': None, 'nostdin': None})
 
+	print(' '.join(ffmpeg.compile(job)))
 
 	try:
-		out, err = ffmpeg.run(job, cmd=FFMPEG_BINARY_PATH, capture_stderr=True, capture_stdout=True)
-		logging.info(out)
-		logging.error(err)
+		err, out = ffmpeg.run(job, cmd=FFMPEG_BINARY_PATH, capture_stderr=True, capture_stdout=True)
+
+		#logging.info(out.decode('utf-8').replace('\n', ' '))
+		#logging.error(err.decode('utf-8').replace('\n', ' '))
 
 	except ffmpeg.Error as e:
-		logging.error(e.stderr.decode())
-		print(e.stderr.decode(), file=sys.stderr)
+		logging.error(e.stderr.decode().replace('\n', ' '))
+		logging.error(e.stderr)
+		logging.error(e)
+
+		#print(e.stderr.decode(), file=sys.stderr)
 
 
 	return send_file('{}/{}_{}.mp4'.format(LOCAL_DESTINATION_PATH, _time, _hash))
@@ -131,6 +138,7 @@ def trim(request):
 # configuration file format
 # GCP Functions / AWS Lambda
 # Include ffmpeg static build?
+# -c copy if 1) mp4 2) only trim and 3) acceptable to have end freeze
 
 # Things to test
 #	moov-atom at the back source file
