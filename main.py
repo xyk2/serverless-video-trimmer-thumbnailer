@@ -14,7 +14,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 from flask import Flask, abort, request, jsonify, send_file
 
-_allowed_params = ['s', 'f', 'q', 'w'] # Allowed parameters in the URL request
+_allowed_params = ['s', 'f', 'q'] # Allowed parameters in the URL request
 SOURCE_BUCKET_NAME = 'LOL'
 DESTINATION_BUCKET_NAME = 'LOL'
 LOCAL_DESTINATION_PATH = './outputs'
@@ -92,7 +92,7 @@ def trim(request):
 	#job = ffmpeg.filter(job, 'fps', fps=25, round='up')
 	#job = ffmpeg.drawbox(job, 50, 50, 120, 120, color='red', thickness=5)
 	#job = ffmpeg.overlay(job, watermark)
-	job = ffmpeg.output(job, '{}/{}_{}.mp4'.format(LOCAL_DESTINATION_PATH, _time, _hash), **{'movflags': '+faststart', 'hide_banner': None, 'nostdin': None})
+	job = ffmpeg.output(job, '{}/{}_{}.mp4'.format(LOCAL_DESTINATION_PATH, _time, _hash), **{'movflags': '+faststart', 'hide_banner': None, 'nostdin': None, 'c': 'copy'})
 
 	print(' '.join(ffmpeg.compile(job)))
 
@@ -133,7 +133,7 @@ def trim(request):
 # Return 302 after finishing uploading and processing (to avoid Lambda and GCF response size limits)
 # Combine clips
 # Watermarking
-# Signed UR generation for private source bucket (and for output as well)
+# Signed URL generation for private source bucket (and for output as well)
 # moov_atom
 # configuration file format
 # GCP Functions / AWS Lambda
