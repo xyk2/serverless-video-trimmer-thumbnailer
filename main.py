@@ -9,12 +9,12 @@ import urllib
 import os
 import sys
 import logging
+from google.cloud import datastore
+from flask import Flask, abort, request, jsonify, send_file, make_response
 
 logging.getLogger().setLevel(logging.INFO)
 
-from flask import Flask, abort, request, jsonify, send_file, make_response
-
-_allowed_params = ['start', 'end', 'q', 'height', 'width', 'fast'] # Allowed parameters in the URL request
+_allowed_params = ['start', 'end', 'height', 'width', 'fast'] # Allowed parameters in the URL request
 SOURCE_BUCKET_NAME = 'LOL'
 DESTINATION_BUCKET_NAME = 'LOL'
 LOCAL_DESTINATION_PATH = './outputs'
@@ -45,7 +45,7 @@ def insert_to_datastore(md5_hash, location):
 	return (md5_hash, location)
 
 def upload_to_storage_and_return_url(filename):
-	"Upload the processed file to cloud storage and return the path."
+	"Upload the processed file to cloud storage and return the URL."
 	return filename
 
 def round_to_nearest_even(number):
@@ -130,19 +130,17 @@ def trim(request):
 		except: abort(400)
 
 	## Create args for ffmpeg.input
-	_input_kwargs = create_input_args(**_params)
+	_input_kwargs = ffmpeg_input_args(**_params)
 
 	## Generate hash
 	_hash = generate_hash("{}:{}".format(json.dumps(_params, sort_keys=True), _source_file))
 
 	job = ffmpeg.input(request_signed_url(_source_file), **_input_kwargs)
 	#job = ffmpeg.filter(job, 'fps', fps=25, round='up')
-	#job = ffmpeg.drawbox(job, 50, 50, 120, 120, color='red', thickness=5)
-	#job = ffmpeg.overlay(job, watermark)
 
-	kwargs = create_output_args(**_params)
+	_output_kwargs = ffmpeg_output_args(**_params)
 
-	job = ffmpeg.output(job, '{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg'), **kwargs)
+	job = ffmpeg.output(job, '{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg'), **_output_kwargs)
 
 
 	try:
@@ -158,19 +156,20 @@ def trim(request):
 		logging.error(e.stderr)
 		logging.error(e)
 
-	logging.info({
+
+
+
+	_info = {
 		'params': _source_params,
 		'js_params': _params,
 		'ffmpeg_input_args': _input_kwargs,
-		'ffmpeg_output_args': kwargs,
+		'ffmpeg_output_args': _output_kwargs,
 		'ffmpeg_command': " ".join(ffmpeg.compile(job)),
 		'source_file': _source_file,
-		'hash': _hash,
-		#'video_stream': video_stream
-	})
+		'hash': _hash
+	}
 
-
-
+	logging.info(_info)
 
 	response = make_response(send_file('{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg')))
 	response.headers['X-Query-Hash'] = _hash
