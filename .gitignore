@@ -1,4 +1,5 @@
 outputs/*.mp4
+outputs/*.jpg
 5_minute*
 __pycache__/*
 *.pyc
