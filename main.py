@@ -27,15 +27,10 @@ client = datastore.Client(GCP_PROJECT_ID) # Set up datastore
 logging.getLogger().setLevel(logging.INFO)
 
 def generate_hash(message):
-	"Returns an MD5 hash given a message."
+	"Returns an MD5 hash."
+
 	hashmd5 = md5(str(message).encode('utf-8')).hexdigest()
 	return hashmd5
-
-def request_signed_url(filename):
-	"Request and return a protected signed URL from the source bucket."
-
-	url = '{}/{}'.format('http://storage.googleapis.com/test_videos_mp4', parse.quote(filename))
-	return url
 
 def read_in_datastore(md5_hash):
 	"Check if this key/value exists in the datastore."
@@ -63,9 +58,14 @@ def insert_to_datastore(md5_hash, location):
 
 	return
 
+def request_signed_url(filename):
+	"Request and return a protected signed URL from the source bucket."
+
+	url = '{}/{}'.format('http://storage.googleapis.com/test_videos_mp4', parse.quote(filename))
+	return url
 
 def upload_to_storage_and_return_url(filename):
-	"Upload the processed file to cloud storage and return the URL."
+	"Upload the processed file to cloud storage and return the public URL."
 	return filename
 
 def round_to_nearest_even(number):
@@ -78,6 +78,8 @@ def round_to_nearest_even(number):
 	return number
 
 def ffmpeg_output_args(**params):
+	"Generate ffmpeg output arguments from parameters."
+
 	kwargs = dict()
 	kwargs['movflags'] = '+faststart' # moov atom in front
 	kwargs['hide_banner'] = None # hide ffmpeg banner from logs
@@ -103,8 +105,10 @@ def ffmpeg_output_args(**params):
 	return kwargs
 
 def ffmpeg_input_args(**params):
+	"Generate input output arguments from parameters."
+
 	kwargs = dict()
-	kwargs['multiple_requests'] = '1' # Reuse tcp connections
+	kwargs['multiple_requests'] = '1' # Reuse tcp connections in pseudostream
 
 	if params['operation'] == 'thumbnail' and 'start' in params and '%' in params['start']:
 		## FFprobe (requires another complete moov atom handshake, slow)
@@ -120,10 +124,6 @@ def ffmpeg_input_args(**params):
 		kwargs['t'] = float(params['end']) - float(params['start'])
 
 	return kwargs
-
-
-
-
 
 
 def trim(request):
@@ -156,17 +156,14 @@ def trim(request):
 	## Check for existing entry in datastore
 	_entity = read_in_datastore(_hash)
 	if _entity:
+		# todo: 301/302/307 redirect
 		print('Already found.')
-		return _entity
 
 	## Create args for ffmpeg.input
 	_input_kwargs = ffmpeg_input_args(**_params)
-
-	job = ffmpeg.input(request_signed_url(_source_file), **_input_kwargs)
-	#job = ffmpeg.filter(job, 'fps', fps=25, round='up')
-
 	_output_kwargs = ffmpeg_output_args(**_params)
 
+	job = ffmpeg.input(request_signed_url(_source_file), **_input_kwargs)
 	job = ffmpeg.output(job, '{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg'), **_output_kwargs)
 
 
@@ -198,6 +195,7 @@ def trim(request):
 
 	logging.info(_info)
 
+	# todo: wrap in try except
 	response = make_response(send_file('{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg')))
 	response.headers['X-Query-Hash'] = _hash
 
