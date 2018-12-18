@@ -2,47 +2,67 @@
 # encoding: utf-8
 
 import ffmpeg
+import datetime
 import time
-import hashlib
-import json
-import urllib
-import os
-import sys
+from hashlib import md5
+from json import dumps
+from urllib import parse
+from os import environ
 import logging
 from google.cloud import datastore
 from flask import Flask, abort, request, jsonify, send_file, make_response
-
-logging.getLogger().setLevel(logging.INFO)
 
 _allowed_params = ['start', 'end', 'height', 'width', 'fast'] # Allowed parameters in the URL request
 SOURCE_BUCKET_NAME = 'LOL'
 DESTINATION_BUCKET_NAME = 'LOL'
 LOCAL_DESTINATION_PATH = './outputs'
 FFMPEG_BINARY_PATH = './ffmpeg_static_builds/mac/ffmpeg'
+GCP_PROJECT_ID = environ.get('GCP_PROJECT', 'personal-projects-225512')
 
-if os.environ.get('GCP_PROJECT', None) is not None:
-	FFMPEG_BINARY_PATH = './ffmpeg_static_builds/amd64/ffmpeg'
-	LOCAL_DESTINATION_PATH = '/tmp'
+if environ.get('GCP_PROJECT', None) is not None:
+	FFMPEG_BINARY_PATH = './ffmpeg_static_builds/amd64/ffmpeg' # bundled as part of repo
+	LOCAL_DESTINATION_PATH = '/tmp' # only /tmp is write-accessible on GCF
 
+client = datastore.Client(GCP_PROJECT_ID) # Set up datastore
+logging.getLogger().setLevel(logging.INFO)
 
 def generate_hash(message):
 	"Returns an MD5 hash given a message."
-	hashmd5 = hashlib.md5(str(message).encode('utf-8')).hexdigest()
+	hashmd5 = md5(str(message).encode('utf-8')).hexdigest()
 	return hashmd5
 
 def request_signed_url(filename):
 	"Request and return a protected signed URL from the source bucket."
 
-	url = '{}/{}'.format('http://storage.googleapis.com/test_videos_mp4', urllib.parse.quote(filename))
+	url = '{}/{}'.format('http://storage.googleapis.com/test_videos_mp4', parse.quote(filename))
 	return url
 
-def check_in_datastore(md5_hash):
-	"Check if this unique query is repeated in the datastore."
-	return md5_hash
+def read_in_datastore(md5_hash):
+	"Check if this key/value exists in the datastore."
+
+	key = client.key('processed_videos', md5_hash)
+	task = client.get(key)
+
+	if task:
+		return task.get('location')
+	else:
+		return None
 
 def insert_to_datastore(md5_hash, location):
-	"Add this unique query to the datastore."
-	return (md5_hash, location)
+	"Add this key/value to the datastore."
+
+	key = client.key('processed_videos', md5_hash)
+	task = datastore.Entity(key)
+
+	task.update({
+	    'location': location,
+	    'created_at': datetime.datetime.utcnow()
+	})
+
+	client.put(task)
+
+	return
+
 
 def upload_to_storage_and_return_url(filename):
 	"Upload the processed file to cloud storage and return the URL."
@@ -129,11 +149,18 @@ def trim(request):
 			else: abort(400)
 		except: abort(400)
 
-	## Create args for ffmpeg.input
-	_input_kwargs = ffmpeg_input_args(**_params)
 
 	## Generate hash
-	_hash = generate_hash("{}:{}".format(json.dumps(_params, sort_keys=True), _source_file))
+	_hash = generate_hash("{}:{}".format(dumps(_params, sort_keys=True), _source_file))
+
+	## Check for existing entry in datastore
+	_entity = read_in_datastore(_hash)
+	if _entity:
+		print('Already found.')
+		return _entity
+
+	## Create args for ffmpeg.input
+	_input_kwargs = ffmpeg_input_args(**_params)
 
 	job = ffmpeg.input(request_signed_url(_source_file), **_input_kwargs)
 	#job = ffmpeg.filter(job, 'fps', fps=25, round='up')
@@ -173,6 +200,9 @@ def trim(request):
 
 	response = make_response(send_file('{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg')))
 	response.headers['X-Query-Hash'] = _hash
+
+	insert_to_datastore(_hash, '{}/{}_{}.{}'.format(LOCAL_DESTINATION_PATH, _time, _hash, 'mp4' if _params['operation'] == 'trim' else 'jpg'))
+
 	return response
 
 	#return jsonify({
@@ -212,6 +242,15 @@ def trim(request):
 #	Benchmark ffmpeg invocation, download, transcode, upload times
 #	Benchmark serverless vs container pricing per clip
 #	Benchmark cross region load times (GCP Japan to GCS Taiwan)
+
+
+
+
+
+
+
+
+
 
 
 
