@@ -1,4 +1,4 @@
-# serverless-video-trimmer
+# serverless video trimmer & thumbnailer
 
 Trim or transcode video clips from long files on serverless platforms (Lambda and GCF). Used in a video pipeline to generate custom user-specified clips server-side. Especially quick for long files as trimming/transcoding is done with byte-range requests. Repeated requests are served from a storage-backed bucket on S3 or GCS.
 
@@ -45,6 +45,7 @@ This approach also comes with disadvantages (some pretty big):
 - ffmpeg
 - ffprobe
 - Flask
+- terraform
 
 ### Static build of ffmpeg
 I ran into issues with the static build of ffmpeg in that it errors with a segfault if doing a overlay filter with a seeked HTTP streaming input. I believe it is related to the timestamp being negative after seeking on a pseudo-streaming input, but more testing is needed. No issues with the build installed through apt.

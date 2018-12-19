@@ -32,4 +32,4 @@ override.tf.json
 #
 # !example_override.tf
 
-*tf/dist/*
+*terraform/dist/*
