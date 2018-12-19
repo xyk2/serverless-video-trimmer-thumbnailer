@@ -1,7 +1,7 @@
 outputs/*.mp4
 outputs/*.jpg
 5_minute*
-__pycache__/*
+__pycache__/
 *.pyc
 personal-projects-225512-56df75db871c.json
 
