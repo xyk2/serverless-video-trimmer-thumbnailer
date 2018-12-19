@@ -23,11 +23,17 @@ Of course, serverless also comes with its own advantages:
 - Reduced costs, because functions run only when requested
 
 This approach also comes with disadvantages (some pretty big):
+- The first uncached request will take some time before a response is generated
 - Not all video formats support pseudo/progressive streaming
 - Requires generation of signed URLs as it relies on HTTP byte range requests
 - Transcoding can be slow, as even the largest GCF configurations are very weak for video processing (max 2 vCPU)
 - GCF as of this time does not support caching with a CDN layer in front natively, so a regional GCS bucket is used instead as a asset store
 - 301/302/307 replies for existing assets is another set of handshakes for the client, slightly increasing load times
+
+
+### Possible improvements
+- Switch from HTTP triggers to a pub/sub model
+- Put behind Firebase Hosting and use it as a CDN
 
 
 

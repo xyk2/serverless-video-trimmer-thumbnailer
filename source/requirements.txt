@@ -1,0 +1,4 @@
+ffmpeg-python
+google-cloud-datastore
+google-cloud-storage
+google-auth
