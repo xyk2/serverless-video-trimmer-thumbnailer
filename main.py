@@ -29,8 +29,7 @@ logging.getLogger().setLevel(logging.INFO)
 def generate_hash(message):
 	"Returns an MD5 hash."
 
-	hashmd5 = md5(str(message).encode('utf-8')).hexdigest()
-	return hashmd5
+	return md5(str(message).encode('utf-8')).hexdigest()
 
 def read_in_datastore(md5_hash):
 	"Check if this key/value exists in the datastore."
@@ -61,7 +60,7 @@ def insert_to_datastore(md5_hash, location):
 def request_signed_url(filename):
 	"Request and return a protected signed URL from the source bucket."
 
-	url = '{}/{}'.format('http://storage.googleapis.com/test_videos_mp4', parse.quote(filename))
+	url = '{}/{}'.format('http://storage.googleapis.com/test_videos_japan', parse.quote(filename))
 	return url
 
 def upload_to_storage_and_return_url(filename):
