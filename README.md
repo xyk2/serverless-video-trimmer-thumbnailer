@@ -13,7 +13,7 @@ Allowed parameters are `fast`, `width`, `height`, `start` and `end`:
 - `width` and `height` (optional) specifies output width and height in pixels. For thumbnails, a percentage can be specified.
 - `start` and `end` (optional) are the start and finish timestamps in seconds.
 
-#### Example live URLs
+### Example live URLs
 Return a thumbnail 200px wide at 50 seconds: https://asia-northeast1-personal-projects-225512.cloudfunctions.net/video-segmentation/thumbnail/start:50,width:200/5_minute_timer.mp4
 
 Return a thumbnail at 50% duration (original video size): https://asia-northeast1-personal-projects-225512.cloudfunctions.net/video-segmentation/thumbnail/start:50%/5_minute_timer.mp4
