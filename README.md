@@ -4,11 +4,23 @@ Trim or transcode video clips from long files on serverless platforms (Lambda an
 
 
 ### Usage
+The general format of the URL is `https://FUNCTION_URL/{operation}/{parameters}/{source_filename}`. 
 
+The operation is either a video `trim` or a `thumbnail`.
 
-### Some insights and observations:
-- GCF caches JPG outputs depending on the Cache-Control header, though it intermittently clears the cache regardless of the header duration
--
+Allowed parameters are `fast`, `width`, `height`, `start` and `end`:
+- `fast` (optional) does a straight codec copy (`-c copy` in ffmpeg), avoiding a slow transcoding step
+- `width` and `height` (optional) specifies output width and height in pixels. For thumbnails, a percentage can be specified.
+- `start` and `end` (optional) are the start and finish timestamps in seconds.
+
+#### Example live URLs
+Return a thumbnail 200px wide at 50 seconds: https://asia-northeast1-personal-projects-225512.cloudfunctions.net/video-segmentation/thumbnail/start:50,width:200/5_minute_timer.mp4
+
+Return a thumbnail at 50% duration (original video size): https://asia-northeast1-personal-projects-225512.cloudfunctions.net/video-segmentation/thumbnail/start:50%/5_minute_timer.mp4
+
+Return a video clip from 10.5 seconds to 20.5 seconds, compressed to 240p: https://asia-northeast1-personal-projects-225512.cloudfunctions.net/video-segmentation/trim/start:10.5,end:20.5,height:240/5_minute_timer.mp4
+
+Return a video clip from 10.5 seconds to 20.5 seconds (original video size): https://asia-northeast1-personal-projects-225512.cloudfunctions.net/video-segmentation/trim/start:10.5,end:20.5,fast/5_minute_timer.mp4
 
 
 ### Advantages & disadvantages
@@ -34,8 +46,8 @@ This approach also comes with disadvantages (some pretty big):
 ### Possible improvements
 - Switch from HTTP triggers to a pub/sub model
 - Put behind Firebase Hosting and use it as a CDN
-
-
+- Improve cold start times
+- Improve ffmpeg start up times with a barebones static build
 
 ### Technologies used
 - python 3.7
@@ -47,9 +59,10 @@ This approach also comes with disadvantages (some pretty big):
 - Flask
 - terraform
 
-### Static build of ffmpeg
-I ran into issues with the static build of ffmpeg in that it errors with a segfault if doing a overlay filter with a seeked HTTP streaming input. I believe it is related to the timestamp being negative after seeking on a pseudo-streaming input, but more testing is needed. No issues with the build installed through apt.
-
-
 ### Deployment
-`gcloud functions deploy serverless-ffmpeg-segmentation --runtime python37 --region=asia-northeast1 --trigger-http --entry-point=trim --memory=2048MB`
+- From `gcloud` command line: `gcloud functions deploy serverless-ffmpeg-segmentation --runtime python37 --region=asia-northeast1 --trigger-http --entry-point=trim --memory=2048MB`
+- Using terraform: run `terraform init` then `terraform apply` from the `terraform` folder. Will set up artifact bucket and automatically zip and create a function `video-segmentation`.
+
+
+### Notes
+I ran into issues with the static build of ffmpeg in that it errors with a segfault if doing a overlay filter with a seeked HTTP streaming input. I believe it is related to the timestamp being negative after seeking on a pseudo-streaming input, but more testing is needed. No issues with the build installed through apt.
